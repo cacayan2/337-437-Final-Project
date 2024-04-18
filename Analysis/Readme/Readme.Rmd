@@ -1,0 +1,16 @@
+---
+title: "Analysis Section (Readme)"
+author: "Esha Ahmad (eahmad1), Michaela Brady (mbrady9), Emil Cacayan (ecacayan)"
+output:
+  pdf_document: default
+  html_document:
+    theme: readable
+    toc: yes
+urlcolor: cyan
+---
+
+Please read this Readme file in its knitted version, either `Readme.pdf` or `Readme.html`!
+
+This subsection of the repository does not contain any content that will be directly part of the final submission, but is a place for everyone to play with ideas in before finalizing and inserting the analyses into the report. 
+
+There is no structure for this directory, feel free to just add files as you feel necessary! 

@@ -1,0 +1,18 @@
+---
+title: "!!!{Insert Working Title}!!!"
+subtitle: "STAT 337/437 Final Project Spring 2024"
+author: "Esha Ahmad (eahmad1), Michaela Brady (mbrady9), and Emil Cacayan (ecacayan)"
+date: "05/05/2024"
+header-includes:
+  - \usepackage[default]{sourcesanspro}
+  - \usepackage[T1]{fontenc}
+mainfont: TimesNewRoman
+output:
+  pdf_document: default
+  html_document:
+    theme: readable
+    toc: yes
+urlcolor: cyan
+---
+
+test

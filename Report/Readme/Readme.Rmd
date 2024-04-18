@@ -1,0 +1,18 @@
+---
+title: "Report Section (Readme)"
+author: "Esha Ahmad (eahmad1), Michaela Brady (mbrady9), Emil Cacayan (ecacayan)"
+output:
+  pdf_document: default
+  html_document:
+    theme: readable
+    toc: yes
+urlcolor: cyan
+---
+
+Please read this Readme file in its knitted version, either `Readme.pdf` or `Readme.html`!
+
+This subsection of the repository contains drafted/finalized versions of the final project that we plan to submit for class. The final paper (will be changed upon guidelines released by Dr. Miles) can be found in: 
+
+* **Rmarkdown Document**: `eahmad1.mbrady9.ecacayan_finalreport.Rmd`
+* **.PDF**: `eahmad1.mbrady9.ecacayan_finalreport.pdf`
+* **.html**: `eahmad1.mbrady9.ecacayan_finalreport.html`
