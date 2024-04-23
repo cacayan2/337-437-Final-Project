@@ -1,0 +1,44 @@
+# Package Loading
+```{r, warning = FALSE, message = FALSE}
+library(readr)
+```
+
+
+
+```{r}
+fetal_health <- read_csv("C:/Users/eacac/Documents/LUC/LUC-github/SP2024/STAT 437/Final Project/337-437-Final-Project/Data/fetal_health.csv", show_col_types = FALSE)
+head(fetal_health, n = 10)
+```
+
+```{r}
+colnames(fetal_health)
+```
+
+
+Has the following (22) variables: 
+
+* `baseline value`: Baseline fetal heart rate (FHR).
+* `accelerations`: Number of accelerations per second. 
+* `fetal_movement`: Number of fetal movements per second. 
+* `uterine_contractions`: Number of uterine contractions per second. 
+* `light_decelerations`: Number of LD's per second.
+* `severe_decelerations`: Number of SD's per second. 
+* `prolongued_decelerations`: Number of PD's per second. 
+* `abnormal_short_term_variability`: Percentage of time with abnormal short term variability. 
+* `mean_value_of_short_term_variability`: Mean value of short term variability. 
+* `percentage_of_time_with_abnormal_long_term_variability`: Percentage of time with abnormal long term variability.
+* `mean_value_of_long_term_variability`: Mean value of long term variability. 
+* `histogram_width`: Width of the histogram made using all values from a record. 
+* `histogram_min`: Histogram minimum value.  
+* `histogram_max`: Histogram maximum value. 
+* `histogram_number_of_peaks`: Number of peaks in the exam histogram. 
+* `histogram_number_of_zeroes`: Number of zeroes in the exam histogram. 
+* `histogram_mode`: Hist mode. 
+* `histogram_mean`: Hist mean. 
+* `histogram_median`: Hist median. 
+* `histogram_variance`: Hist variance. 
+* `histogram_tendency`: Histogram trend. 
+* `fetal_health`: Fetal health with 3 levels: 
+  - 1 - Normal
+  - 2 - Suspect
+  - 3 - Pathological
