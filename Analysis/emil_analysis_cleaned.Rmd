@@ -1,0 +1,610 @@
+---
+title: "STAT 337/437 Cleaned Analysis"
+author: "Esha Ahmad (eahmad1), Michaela Brady (mbrady9), and Emil Cacayan (ecacayan)"
+date: "04/23/2024"
+output:
+  pdf_document: default
+  html_document:
+    theme: readable
+    toc: yes
+urlcolor: cyan
+---
+
+
+```{r, echo = FALSE, warning = FALSE}
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff= 60), tidy = TRUE)
+```
+
+# Package Loading
+The following packages will be used: 
+
+* `readr`: Used for the reading of rectangular data into `R`. This is quicker than the typically used `read.csv()` or `read.table()` methods of loading `.csv` files into `R`, and loads data into `R` as a tibble/dataframe. 
+* `nnet`: Used for multinomial regression (`multinom()`), and is a package used to fit single-hidden-layer neural networks.
+* `car`: Used for `Anova()` statistical test, contains functions to accompany regression tasks. 
+* `class`: Used to run K nearest neighbors classification. 
+* `randomForest`: Used for implementation of Random Forest classification method (`randomForest()`). 
+* `gbm`: Used for implementation of boosting classification method (`gbm()`)
+* `tree`: Used to generate decision trees (`tree()`). 
+
+```{r, warning = FALSE, message = FALSE}
+library(readr)
+library(nnet)
+library(car)
+library(randomForest)
+library(gbm)
+library(class)
+library(tree)
+```
+
+# Research Question and Introduction to the Dataset 
+## Introduction
+[Link to Dataset](https://www.kaggle.com/datasets/andrewmvd/fetal-health-classification/data)
+
+The dataset linked above titled "Fetal Health Classification" is a classification task classifying the health of a fetus as `Normal`, `Suspect`, or `Pathological` using cardiotocogram exams, which is a continuous recording of the fetal heart rate obtained via an ultrasound transducer placed on the mother's abdomen, which is widely used as a method of assessing fetal well-being, predominantly in pregnancies with increased risk of complications (**note:** this is taken from [this paper](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6510058/#:~:text=Cardiotocography%20(CTG)%20is%20a%20continuous,with%20increased%20risk%20of%20complications.)).
+
+**Research Question:** Which variables are important in determine the health of a fetus, and which classification method will most accurately classify the health of a fetus (for the population - not just for the sample collected in this analysis)? 
+
+## Dataset Loading and Cleaning
+Let's load this data into `R`. 
+```{r}
+# Reading the dataset into R. 
+fetal.health <- read_csv("../Data/fetal_health.csv", show_col_types = FALSE)
+```
+
+Now let's see the dimensions of the dataset. 
+```{r}
+# Displaying dimensions of the dataset. 
+c("Observations: " = dim(fetal.health)[1], "Variables: " = dim(fetal.health)[2])
+```
+
+As we see, we have $n = 2126$ observations and $p = 22$ variables. Let's see the names of these variables. 
+
+```{r}
+# Displaying names of variables in dataset. 
+colnames(fetal.health)
+```
+
+So we have the following variables in our dataset: 
+
+* `baseline value`: Baseline fetal heart rate (FHR).
+* `accelerations`: Number of accelerations per second. 
+* `fetal_movement`: Number of fetal movements per second. 
+* `uterine_contractions`: Number of uterine contractions per second. 
+* `light_decelerations`: Number of LD's per second.
+* `severe_decelerations`: Number of SD's per second. 
+* `prolongued_decelerations`: Number of PD's per second. 
+* `abnormal_short_term_variability`: Percentage of time with abnormal short term variability. 
+* `mean_value_of_short_term_variability`: Mean value of short term variability. 
+* `percentage_of_time_with_abnormal_long_term_variability`: Percentage of time with abnormal long term variability.
+* `mean_value_of_long_term_variability`: Mean value of long term variability. 
+* `histogram_width`: Width of the histogram made using all values from a record. 
+* `histogram_min`: Histogram minimum value.  
+* `histogram_max`: Histogram maximum value. 
+* `histogram_number_of_peaks`: Number of peaks in the exam histogram. 
+* `histogram_number_of_zeroes`: Number of zeroes in the exam histogram. 
+* `histogram_mode`: Hist mode. 
+* `histogram_mean`: Hist mean. 
+* `histogram_median`: Hist median. 
+* `histogram_variance`: Hist variance. 
+* `histogram_tendency`: Histogram trend. 
+* `fetal_health`: Fetal health with 3 levels: 
+  - 1 - Normal
+  - 2 - Suspect
+  - 3 - Pathological
+
+Our response will be `fetal_health`, and the goal We can perform some cleanup of the dataset. While there are no missing data points, we will do two things: 
+* Change the name of the `baseline value` to `baseline_value`. 
+  - Many of the functions used in this analysis do not play well with spaces in the variable name. 
+* Change the `fetal_health` variable to a factor variable. 
+  - Some of the functions do not automatically cast `fetal_health` (by default a continuous variable) to a factor variable, and since this is a classification problem, the values in `fetal_health` should be discrete classes, not a continuous variable. 
+
+```{r}
+# Changing the name of baseline value to baseline_value. 
+colnames(fetal.health)[1] <- "baseline_value"
+
+# Verifying name change. 
+colnames(fetal.health)[1]
+
+# Changing fetal_health to a factor variable. 
+fetal.health$fetal_health <- as.factor(fetal.health$fetal_health)
+
+# Verifying change. 
+is.factor(fetal.health$fetal_health)
+
+# Seeing levels of fetal_health. 
+levels(fetal.health$fetal_health)
+```
+
+Let's see see the first few data points of the dataset: 
+```{r}
+# Displaying first 10 data points of the dataset. 
+head(fetal.health, n = 10)
+```
+  
+There are some variables here that have means of 0, or have inputs of very close to 0. As a result, we should be careful if we choose to use regression for this model, as it is highly likely that the regression will either not converge or overfit the data. 
+
+For the sake of space, viewing the correlation matrix is not possible. But there are no truly strong or suspicious correlations, and so this data does not show any red flags for collinearity issues. 
+
+# Analysis
+## Fitting a Full Multinomial Regression (All Predictors)
+Now let's fit the full model using multinomial regression using the `multinom()` function, the `maxit` argument ensures that the regression converges and doesn't stop halfway through: 
+
+```{r}
+# Fitting the model. 
+multinom.mod.full <- multinom(fetal_health ~ ., data = fetal.health, maxit = 1000, trace = FALSE)
+
+# Viewing the summary of the model. 
+summary(multinom.mod.full)
+```
+
+`multinom()` fits a baseline category logit model (BCL) and each set of $\hat{\beta}$ parameters estimated compares the log odds with a baseline category (which is category 1, normal). 
+
+## Odds Ratios
+**You can skip over this part if you want**
+
+The interpretation of a baseline category logit model is usually through the log odds, which is calculated as follows: 
+
+$$
+\text{OR}_i = e ^ {c\beta_i}
+$$
+
+For instance, for the parameters estimated for `uterine_contractions`, we get the following: 
+
+```{r}
+# Calculating odds ratio.
+OR_contractions.2 <- exp(coefficients(multinom.mod.full)[9])
+
+# Displaying odds ratio. 
+OR_contractions.2
+```
+
+This means that for a 1 unit increase in `uterine_contractions`, the odds of an infant being in the suspect category (vs. the normal category) changes by a factor of `r OR_contractions.2` times, meaning overall the odds are smaller for each 1 unit increase in `uterine_contractions`. In other words, increases in `uterine_contractions` scales the odds of an infant being in the normal category (vs. the suspect category) upward. You can do this for the remaining variables, but in general, parameter estimates greater than 0 scale the odds upward, while parameter estimates less than 0 scale the odds downward, and odds ratios equal to 0 do not change the odds. 
+
+Let's do one more example, this time for `baseline_value`.   
+
+```{r}
+# Calculating odds ratios.
+OR_baseline.2 <- exp(coefficients(multinom.mod.full)[3])
+OR_baseline.3 <- exp(coefficients(multinom.mod.full)[4])
+
+# Displaying odds ratios. 
+(c("2 vs. 1" = OR_baseline.2, "3 vs. 1" = OR_baseline.3))
+
+```
+
+I'll just put a shorthand interpretation here. The first odds ratio says that keeping all other variables equal, a 1 unit increase in `baseline_value` changes the odds of being in the suspect category (vs. normal) by a factor of `r round(OR_baseline.2, 4)`, and changes the odds of being in the pathological category (vs. normal) by a factor of `r round(OR_baseline.3, 4)`. This means that a faster heart rate will cause the odds of you being suspect (vs. normal) to become smaller, but the odds of you being suspect (vs. normal) to be larger. This implies that at the lower range of the heart rates recorded in this dataset, an increase is generally better, but there must be some cutoff point where increases cause a more negative fetal outcome, but this is speculative as more models need to be fit (perhaps with a different baseline than 1). 
+
+## Hypothesis Test: Anova
+We can run `Anova()` from the `car` package, which tests the following hypotheses: 
+
+$$
+\begin{aligned}
+  H_0:\text{All } \beta_j = 0, j = 1 \ldots p \\
+  H_a:\text{At least 1 } \beta_j \neq 0, j = 1 \ldots p
+\end{aligned}
+$$
+
+This uses a likelihood ratio test which follows a $\chi^2$ distribution. 
+
+```{r}
+# Running Anova. 
+Anova(multinom.mod.full)
+```
+
+As we can see, all variables are considered highly significant according to the $p$-values with a significance threshold of $\alpha = 0.05$. This is a red flag because this indicates that our model is overfitting the dataset. It is difficult to compare $p$-values because they are so small, so for ease of interpretations, we will be looking at the largest (relative to the remaining variables) test statistics generated by this test for the "most significant" variables: 
+
+```{r}
+Anova(multinom.mod.full)[1]
+```
+
+So our variables of note are (using a cutoff of around 100): 
+
+* `baseline_value`: `LR Chisq` = 110.074
+* `accelerations`: `LR chisq` = 229.339
+* `light_decelerations`: `LR Chisq` = 116.772
+* `abnormal_short_term_variability`: `LR Chisq` = 180.222
+* `percentage_of_time_with_abnormal_long_term_variability` = 127.904
+* `histogram_median`: `LR Chisq` = 109.991
+* `histogram_variance`: `LR Chisq` = 132.318
+
+Let's fit a new model with only these variables. 
+
+```{r}
+# Fitting a new multinomial model.
+multinom.mod.reduced <- multinom(fetal_health ~ baseline_value + accelerations + light_decelerations + abnormal_short_term_variability + percentage_of_time_with_abnormal_long_term_variability + histogram_median + histogram_variance, data = fetal.health, trace = FALSE, maxiter = 1000)
+```
+
+And compare how this model performs against the original model. Here we will use the `anova()` function in base `R`, which is the same test. But in the `Anova()` function, `R` starts with the full model and removes each variable and tests how RSS increases. `anova()` starts with an empty model and shows how RSS decreases as each predictor is added. 
+
+```{r}
+anova(multinom.mod.reduced, multinom.mod.full)[, 6:7]
+```
+
+We get a very large test statistic and a very small $p$-value, which indicates that we prefer the new model over the original large model. This is the multinomial model we will use to classify the data.
+
+Let's run `Anova()` once more on this new model. 
+
+```{r}
+# Running Anova on the reduced model.
+Anova(multinom.mod.reduced)
+```
+
+We are suspicious still of overfitting because of the small $p$-values, and so we would like to reduce this model further a selection criteria such as `AIC()` and compare the performance of this model with other classification methods. 
+
+## AIC Selection
+AIC will help with our overfitting problem by adding a penalty for the complexity of the model. Let's see the AIC for each of the models we fit. 
+
+```{r}
+# Displaying AIC for each model.
+(c("AIC Full: " = extractAIC(multinom.mod.full)[[2]], "AIC Reduced: " = extractAIC(multinom.mod.reduced)[[2]]))
+```
+
+As we can see, reducing our model improved the AIC significantly. Let's see if this AIC can be improved further. We will utilize backwards AIC to select a new model - using hypothesis testing might be somewhat erroneous because of the overfitting problem we are running into. 
+
+```{r}
+# Performing backwards AIC. 
+bac.aic.mod <- step(object = multinom.mod.reduced, direction = "backward", k = 2, trace = FALSE)
+```
+
+Let's compare the AIC for the models. 
+```{r}
+(c("Original Model: " = extractAIC(multinom.mod.reduced)[[2]], "AIC Selected Model: " = extractAIC(bac.aic.mod)[2]))
+```
+
+So as we can see, our backwards AIC selection did not change the model, and so we will keep all the variables for our model. Let's test the prediction accuracy of this model using $K = 20$ cross-validation (LOOCV not computationally realistic). Each time the `for()` loop is run, the reduced model is generated and then undergoes backwards AIC selection. 
+
+```{r}
+# Setting seed for consistency of results.
+set.seed(2022)
+
+# Randomly shuffling the index of the data. 
+index.random <- sample(1:dim(fetal.health)[1])
+
+# Splitting the data for K = 20 cross-validation. 
+groups <- cut(1:dim(fetal.health)[1], 20, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# An empty vector to save prediction for fetal_health. 
+health.pred <- c()
+
+# Running cross-validation.
+for(index.test in index.fold) {
+  # Creating training and test set. 
+  data.test <- fetal.health[index.test, ]
+  data.train <- fetal.health[-index.test, ]
+  
+  # Fitting an aic selected model on the training set. 
+  bac.aic.mod.tmp <- step(object = multinom(fetal_health ~ baseline_value + accelerations + light_decelerations + 
+                                              abnormal_short_term_variability + percentage_of_time_with_abnormal_long_term_variability + 
+                                              histogram_median + histogram_variance, data = data.train, maxit = 1000, trace = FALSE), 
+                          direction = "backward", k = 2, trace = FALSE)
+  
+  # Predicting on the test set. 
+  pred <- predict(bac.aic.mod.tmp, data.test, type = "class")
+  
+  # Saving the predict fetal_health predictions. 
+  health.pred <- c(health.pred, pred)
+}
+```
+
+Now let's see how well the model fitting performed. 
+
+```{r}
+# Calculating prediction accuracy. 
+health.truth <- fetal.health$fetal_health[index.random]
+pred.acc.aic <- mean(health.pred == health.truth)
+(c("Prediction Accuracy for AIC Model: " = pred.acc.aic))
+
+# Displaying confusion matrix. 
+table(health.pred, health.truth)
+```
+
+Let's compare this to the full model: 
+
+```{r}
+# Setting seed for consistency of results.
+set.seed(2022)
+
+# Randomly shuffling the index of the data. 
+index.random <- sample(1:dim(fetal.health)[1])
+
+# Splitting the data for K = 20 cross-validation. 
+groups <- cut(1:dim(fetal.health)[1], 20, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# An empty vector to save prediction for fetal_health. 
+health.pred <- c()
+
+# Running cross-validation.
+for(index.test in index.fold) {
+  # Creating training and test set. 
+  data.test <- fetal.health[index.test, ]
+  data.train <- fetal.health[-index.test, ]
+  
+  # Fitting a multinomial model based on training set. 
+  full.mod.tmp <- multinom(fetal_health ~ ., data = data.train, trace = FALSE)
+  
+  # Predicting on the test set. 
+  pred <- predict(full.mod.tmp, data.test, type = "class")
+  
+  # Saving the predict fetal_health predictions. 
+  health.pred <- c(health.pred, pred)
+}
+```
+
+Now let's see how well this model performs: 
+
+```{r}
+# Calculating prediction accuracy. 
+health.truth <- fetal.health$fetal_health[index.random]
+pred.acc.full <- mean(health.pred == health.truth)
+(c("Prediction Accuracy for Full Model: " = pred.acc.full))
+
+# Displaying confusion matrix. 
+table(health.pred, health.truth)
+```
+
+So our full model has a 1.6% incrase in accuracy. In terms of explaining the model, the smaller is superior, but the larger model has better prediction accuracy. But for the computational overhead required to use the full model for regression task, it is questionable whether the 1.6% increase in accuracy is truly worth it - and if some of the variables are so incredibly biased (some of the variables mostly 0 values) that the full model is still overfitting the test data even after cross-validation. 
+
+Let's compare how well these performs with other classification methods. All classification methods will also be cross-validated. 
+
+## K Nearest Neighbors Classification
+
+We will use cross-validation for as well. From previous tests, it seems $K = 4$ produces the highest accuracy without too much overfitting.
+
+```{r}
+# Setting seed for consistency of results.
+set.seed(2022)
+
+# Randomly shuffling the index of the data. 
+index.random <- sample(1:dim(fetal.health)[1])
+
+# Splitting the data for K = 20 cross-validation. 
+groups <- cut(1:dim(fetal.health)[1], 20, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# An empty vector to save prediction for fetal_health. 
+health.pred <- c()
+
+# Running cross-validation.
+for(index.test in index.fold) {
+  # Creating training and test set. 
+  data.test <- fetal.health[index.test, ]
+  data.train <- fetal.health[-index.test, ]
+  
+  # Classifying using k = 4 nearest neighbors.
+  pred <- knn(train = data.train[, -22], 
+              test = data.test[, -22], 
+              cl = data.train$fetal_health, 
+              k = 4)
+  
+  # Saving the predict fetal_health predictions. 
+  health.pred <- c(health.pred, pred)
+}
+```
+
+Now let's see how well this classifier performs: 
+
+```{r}
+# Calculating prediction accuracy. 
+health.truth <- fetal.health$fetal_health[index.random]
+pred.acc.knn <- mean(health.pred == health.truth)
+(c("Prediction Accuracy for KNN: " = pred.acc.knn))
+
+# Displaying confusion matrix. 
+table(health.pred, health.truth)
+```
+
+After being cross-validated, this classification method outperforms both of the multinomial regression models tested earlier. 
+
+## Decision Tree
+```{r}
+# Setting seed for consistency of results.
+set.seed(2022)
+
+# Randomly shuffling the index of the data. 
+index.random <- sample(1:dim(fetal.health)[1])
+
+# Splitting the data for K = 20 cross-validation. 
+groups <- cut(1:dim(fetal.health)[1], 20, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# An empty vector to save prediction for fetal_health. 
+health.pred <- c()
+
+# Running cross-validation.
+for(index.test in index.fold) {
+  # Creating training and test set. 
+  data.test <- fetal.health[index.test, ]
+  data.train <- fetal.health[-index.test, ]
+  
+  # Creating trees. 
+  tree.fetal_health <- tree(fetal_health ~ ., data = data.train)
+  
+  # Predicting based off of trees. 
+  pred <- predict(tree.fetal_health, newdata = data.test, type = 'class')
+  
+  # Saving the predict fetal_health predictions. 
+  health.pred <- c(health.pred, pred)
+}
+```
+
+Now let's see how well this classifier performs: 
+
+```{r}
+# Calculating prediction accuracy. 
+health.truth <- fetal.health$fetal_health[index.random]
+pred.acc.tree <- mean(health.pred == health.truth)
+(c("Prediction Accuracy for Decision Tree: " = pred.acc.tree))
+
+# Displaying confusion matrix. 
+table(health.pred, health.truth)
+```
+
+This classification method performs the best out of the methods tested so far, indicating that logistic regression and KNN may not be the best method of testing the dataset. 
+
+# Bagging, Random Forest, and Boosting
+## Bagging
+
+The value of `mtry` here is the number of total variables excluding the explanatory variable. 
+
+```{r}
+# Setting the seed for consistency of results.
+set.seed(2022)
+
+# Randomly shuffling the index of the data. 
+index.random <- sample(1:dim(fetal.health)[1])
+
+# Splitting the data for K = 20 cross-validation. 
+groups <- cut(1:dim(fetal.health)[1], 20, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# An empty vector to save prediction for fetal_health. 
+health.pred <- c()
+
+# Running cross-validation.
+for(index.test in index.fold) {
+  # Creating training and test set. 
+  data.test <- fetal.health[index.test, ]
+  data.train <- fetal.health[-index.test, ]
+  
+  # Performing bagging.
+  bagging.fetal_health <- randomForest(fetal_health ~ ., mtry = ncol(fetal.health) - 1, ntree = 500, importance = TRUE, data = data.train)
+  
+  # Predicting based off bagging.
+  pred <- predict(bagging.fetal_health, newdata = data.test, type = 'class')
+  
+  # Saving the predict fetal_health predictions. 
+  health.pred <- c(health.pred, pred)
+}
+```
+
+Now let's see how well this classifier performs: 
+
+```{r}
+# Calculating prediction accuracy. 
+health.truth <- fetal.health$fetal_health[index.random]
+pred.acc.bag <- mean(health.pred == health.truth)
+(c("Prediction Accuracy for Bagging: " = pred.acc.bag))
+
+# Displaying confusion matrix. 
+table(health.pred, health.truth)
+```
+
+Bagging is a better classification method than decision tree as it uses an ensemble of trees. 
+
+## Random Forest
+The value of `mtry` here is roughtly $\sqrt{p}$.
+
+```{r}
+# Setting the seed for consistency of results.
+set.seed(2022)
+
+# Randomly shuffling the index of the data. 
+index.random <- sample(1:dim(fetal.health)[1])
+
+# Splitting the data for K = 20 cross-validation. 
+groups <- cut(1:dim(fetal.health)[1], 20, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# An empty vector to save prediction for fetal_health. 
+health.pred <- c()
+
+# Running cross-validation.
+for(index.test in index.fold) {
+  # Creating training and test set. 
+  data.test <- fetal.health[index.test, ]
+  data.train <- fetal.health[-index.test, ]
+  
+  # Performing random forest.
+  rf.fetal_health <- randomForest(fetal_health ~ ., mtry = round(sqrt(ncol(fetal.health) - 1)), ntree = 500, importance = TRUE, data = data.train)
+  
+  # Predicting based off random forest.
+  pred <- predict(rf.fetal_health, newdata = data.test, type = 'class')
+  
+  # Saving the predict fetal_health predictions. 
+  health.pred <- c(health.pred, pred)
+}
+```
+
+Now let's see how well this classifier performs: 
+
+```{r}
+# Calculating prediction accuracy. 
+health.truth <- fetal.health$fetal_health[index.random]
+pred.acc.rf <- mean(health.pred == health.truth)
+(c("Prediction Accuracy for Random Forest: " = pred.acc.rf))
+
+# Displaying confusion matrix. 
+table(health.pred, health.truth)
+```
+
+Boosting is better than bagging for prediction accuracy, which reduces the overfitting/variance of the model. 
+
+## Boosting
+Boosting's implementation for a multinomial response is broken, but we will test it anyway. Normally, this `R` code will throw warnings for this, but these have been supressed. 
+
+```{r, warning = FALSE, message = FALSE}
+# Setting the seed for consistency of results.
+set.seed(2022)
+
+# Randomly shuffling the index of the data. 
+index.random <- sample(1:dim(fetal.health)[1])
+
+# Splitting the data for K = 20 cross-validation. 
+groups <- cut(1:dim(fetal.health)[1], 20, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# An empty vector to save prediction for fetal_health. 
+health.pred <- c()
+
+# Running cross-validation.
+for(index.test in index.fold) {
+  # Creating training and test set. 
+  data.test <- fetal.health[index.test, ]
+  data.train <- fetal.health[-index.test, ]
+  
+  # Performing boosting.
+  boost.fetal_health <- gbm(fetal_health ~ ., n.trees = 500, distribution = "multinomial", data = data.train)
+  
+  # Predicting based off boosting.
+  prob <- predict(boost.fetal_health, newdata = data.test, type = 'response')
+  pred <- max.col(matrix(unlist(prob), ncol = 3, byrow = T), 'first')
+
+  # Saving the predict fetal_health predictions. 
+  health.pred <- c(health.pred, pred)
+}
+```
+
+Now let's see how well this classifier performs: 
+
+```{r}
+# Calculating prediction accuracy. 
+health.truth <- fetal.health$fetal_health[index.random]
+pred.acc.boost <- mean(health.pred == health.truth)
+(c("Prediction Accuracy for Boosting: " = pred.acc.boost))
+
+# Displaying confusion matrix. 
+table(health.pred, health.truth)
+```
+
+The inaccuracy is likely due to the implementation of this classifier still being broken. 
+
+# Summary
+The best classification method seems to be random forest. 
+
+The variables with the strongest relationship with the response variable seem to be: 
+
+* `baseline_value`: `LR Chisq` = 110.074
+* `accelerations`: `LR chisq` = 229.339
+* `light_decelerations`: `LR Chisq` = 116.772
+* `abnormal_short_term_variability`: `LR Chisq` = 180.222
+* `percentage_of_time_with_abnormal_long_term_variability` = 127.904
+* `histogram_median`: `LR Chisq` = 109.991
+* `histogram_variance`: `LR Chisq` = 132.318
+
+Things to do next: 
+
+* Summarize results in a table. 
+* Explain strengths of using logistic multinomial regression (interpretability). 
+* Explain strengths of using other classifiers. 
