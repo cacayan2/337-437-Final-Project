@@ -3,12 +3,13 @@
 # Package Loading
 ```{r, warning = FALSE, message = FALSE}
 library(readr)
+library(nnet)
+library(stats)
+library(car)
 ```
 
-
-
 ```{r}
-fetal_health <- read_csv("C:/Users/eacac/Documents/LUC/LUC-github/SP2024/STAT 437/Final Project/337-437-Final-Project/Data/fetal_health.csv", show_col_types = FALSE)
+fetal_health <- read_csv("../Data/fetal_health.csv", show_col_types = FALSE)
 head(fetal_health, n = 10)
 ```
 
@@ -44,3 +45,194 @@ Has the following (22) variables:
   - 1 - Normal
   - 2 - Suspect
   - 3 - Pathological
+  
+Because we are using data for explanation of relationship between variables, we don't want to use PCA. We fit the model below and run `Anova()` from the `car` package: 
+
+```{r}
+multinom.model <- multinom(fetal_health ~ ., data = fetal_health, maxit = 1000)
+null.model <- multinom(fetal_health ~ 1, data = fetal_health, maxit = 1000)
+Anova.multinom <- Anova(multinom.model)
+Anova.multinom$"Pr(>Chisq) New" <- Anova.multinom$"Pr(>Chisq)"
+Anova.multinom[, c(1, 3)]
+Anova.multinom
+```
+
+We see that this model is extremely prone to overfitting. Let's see if we can reduce the model bias with backward AIC selection.  
+  
+```{r}
+bac.aic.mod <- step(object = multinom(fetal_health ~ ., data = fetal_health, maxit = 1000, trace = FALSE), direction = "backward", k = 2, trace = FALSE)
+(c("Number of EV's in Full Model" = length(coefficients(multinom.model)), "Number of EV's in AIC selected Model: " = length(coefficients(bac.aic.mod))))
+```
+  
+Let's compare the AIC for the models. 
+```{r}
+(c("Full Model AIC: " = extractAIC(multinom.model)[2], "AIC Selected Model: " = extractAIC(bac.aic.mod)[2]))
+```
+
+
+Let's run `Anova()` once more: 
+```{r}
+Anova(bac.aic.mod)
+```
+
+The model fit still has overfitting issues, but it seems that the remaining significant variables have higher test statistics than the variables in the full model. And because of the smaller number of variables, this model will be easier to interpret. 
+
+It is very hard to test these models' prediction accuracies based on the dataset (since both of these models alone use the entire dataset), so let's test using $K = 3$ cross validation (only 3 groups because of the computational overhead required to fit the `AIC` model).
+
+```{r}
+data <- fetal_health
+
+# 5-fold cross vaidation
+set.seed(2022)
+
+# randomly shuffle the index
+index.random <- sample(1:dim(data)[1])
+
+# split the data (index) into 5 folds 
+groups <- cut(1:dim(data)[1], 3, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# an empty vector to save predicted tumor type
+type.pred <- c()
+
+for(index.test in index.fold){
+  # creat training and test set
+  data.test <- data[index.test,]
+  data.train <- data[-index.test,]
+
+  # fit a linear model on the training set
+  multinom_model <- multinom(fetal_health ~ ., data = data.train, trace = FALSE)
+  
+  # predict on the test set
+  pred <- predict(multinom_model, data.test, type = 'class')
+  
+  # save predicted tumor types
+  type.pred <- c(type.pred, pred)
+}
+
+# calculate prediction accuracy
+type.truth <- data$fetal_health[index.random]
+pred.acc.full <- mean(type.pred == type.truth)
+pred.acc.full
+
+# confusion matrix for classification with multiple classes
+table(type.pred, type.truth)
+```
+
+Now for the AIC model: 
+```{r}
+data <- fetal_health
+
+# 5-fold cross vaidation
+set.seed(2022)
+
+# randomly shuffle the index
+index.random <- sample(1:dim(data)[1])
+
+# split the data (index) into 5 folds 
+groups <- cut(1:dim(data)[1], 3, labels = FALSE)
+index.fold <- split(index.random, groups)
+
+# an empty vector to save predicted tumor type
+type.pred <- c()
+
+for(index.test in index.fold){
+  # creat training and test set
+  data.test <- data[index.test,]
+  data.train <- data[-index.test,]
+
+  # fit a linear model on the training set
+  aic_model <- step(object = multinom(fetal_health ~ ., data = data.train, maxit = 1000, trace = FALSE), direction = "backward", k = 2, trace = FALSE)
+  
+  # predict on the test set
+  pred <- predict(multinom_model, data.test, type = 'class')
+  
+  # save predicted tumor types
+  type.pred <- c(type.pred, pred)
+}
+
+# calculate prediction accuracy
+type.truth <- data$fetal_health[index.random]
+pred.acc.aic <- mean(type.pred == type.truth)
+pred.acc.aic
+
+# confusion matrix for classification with multiple classes
+table(type.pred, type.truth)
+```
+
+Prediction accuracy improved slightly for $K = 3$ groups. 
+
+# KNN Classification
+```{r}
+library(class)
+fetal_health$fetal_health <- as.factor(fetal_health$fetal_health)
+
+set.seed(2022)
+index.train <- sample(1:dim(fetal_health)[1], 0.8 * dim(fetal_health)[1])
+data.train <- fetal_health[index.train,]
+data.test <- fetal_health[-index.train,]
+
+
+  
+yhat.test <- knn(
+  train = data.train[, -22],
+  test = data.test[, -22],
+  cl = data.train$fetal_health,
+  k = 4
+)
+
+knn.acc <- mean(data.test$fetal_health==yhat.test)
+
+knn.acc
+
+```
+
+# Decision Tree
+```{r}
+set.seed(2022)
+index.train <- sample(1:dim(fetal_health)[1], 0.8 * dim(fetal_health)[1])
+data.train <- fetal_health[index.train,]
+data.test <- fetal_health[-index.train,]
+
+tree.fetal_health <- tree(fetal_health ~ ., data=data.train)
+yhat.test <- predict(tree.heart , newdata = data.test, type='class')
+
+mean(data.test$AHD==yhat.test)
+table(data.test$AHD, yhat.test)
+```
+
+
+# Bagging, Boosting, Random Forest
+```{r}
+library(randomForest)
+library(gbm)
+fetal_health <- read_csv("../Data/fetal_health.csv", show_col_types = FALSE)
+# random split the data into 80% training and 20% test
+set.seed(2022)
+index.train <- sample(1:dim(fetal_health)[1], 0.8 * dim(fetal_health)[1])
+data.train <- fetal_health[index.train,]
+data.test <- fetal_health[-index.train,]
+colnames(fetal_health)[1] <- "baseline_value"
+colnames(fetal_health)
+fetal_health$fetal_health <- as.factor(fetal_health$fetal_health)
+
+# bagging
+bagging.fetal_health <- randomForest(fetal_health ~ ., mtry=ncol(fetal_health), ntree=500, importance = TRUE, data=data.train)
+
+# random forest
+rf.fetal_health <- randomForest(fetal_health~., mtry=round(sqrt(ncol(fetal_health))), ntree=500, data=data.train)
+
+# boosting
+boost.fetal_health <- gbm(as.factor(fetal_health)~., n.trees=500, distribution = "multinomial", data=data.train)
+
+yhat.test.bag <- predict(bagging.fetal_health , newdata = data.test, type='class')
+yhat.test.rf <- predict(rf.fetal_health , newdata = data.test, type='class')
+yhat.test.prob <- predict(boost.fetal_health , newdata = data.test, type='response')
+yhat.test.boost <- ifelse(yhat.test.prob>0.5,1,0)
+
+mean(yhat.test.bag==data.test$fetal_health)
+mean(yhat.test.rf==data.test$fetal_health)
+mean(yhat.test.boost==data.test$fetal_health)
+```
+
+
