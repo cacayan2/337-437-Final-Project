@@ -3,10 +3,10 @@ title: "STAT 337/437 Cleaned Analysis"
 author: "Esha Ahmad (eahmad1), Michaela Brady (mbrady9), and Emil Cacayan (ecacayan)"
 date: "04/23/2024"
 output:
-  pdf_document: default
   html_document:
     theme: readable
     toc: yes
+  pdf_document: default
 urlcolor: cyan
 ---
 

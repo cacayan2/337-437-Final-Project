@@ -6,6 +6,7 @@ library(readr)
 library(nnet)
 library(stats)
 library(car)
+library(class)
 ```
 
 ```{r}
@@ -164,7 +165,7 @@ Prediction accuracy improved slightly for $K = 3$ groups.
 
 # KNN Classification
 ```{r}
-library(class)
+
 fetal_health$fetal_health <- as.factor(fetal_health$fetal_health)
 
 set.seed(2022)
